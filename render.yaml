@@ -4,7 +4,7 @@ services:
     name: yeumoney-bot
     env: python
     # Tăng dung lượng RAM để chạy trình duyệt ổn định hơn
-    plan: standard 
+    plan: free 
     buildCommand: |
       pip install --upgrade pip
       pip install -r requirements.txt
