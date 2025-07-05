@@ -19,23 +19,26 @@ async def automation_worker(queue: asyncio.Queue):
     "Người làm việc" chạy nền vĩnh viễn.
     Nó chờ đợi công việc trong hàng đợi và xử lý chúng.
     """
-    # Import module nặng một lần duy nhất khi worker bắt đầu
     from automation import run_automation_task
     print("✅ Worker tự động hóa đã sẵn sàng.")
 
     while True:
         try:
-            # Chờ đợi để lấy một công việc từ hàng đợi
             interaction, keyword_value, keyword_name = await queue.get()
             print(f"Worker đã nhận công việc cho: {keyword_name}")
 
-            # Chạy tác vụ blocking (Selenium) trong một luồng khác
+            # Sửa tin nhắn gốc để thông báo cho người dùng
+            await interaction.edit_original_response(
+                content=f"⏳ Đang chạy kịch bản cho **{keyword_name}**... Vui lòng chờ."
+            )
+
+            # Chạy tác vụ blocking (Selenium)
             loop = asyncio.get_running_loop()
             result = await loop.run_in_executor(
                 None, run_automation_task, keyword_value
             )
             
-            # Gửi kết quả bằng interaction.followup
+            # Gửi kết quả bằng một tin nhắn followup mới
             if result['status'] == 'success':
                 embed = discord.Embed(
                     title=f"✅ Lấy mã thành công cho {keyword_name}!",
@@ -56,11 +59,17 @@ async def automation_worker(queue: asyncio.Queue):
                 embed.set_footer(text=f"Yêu cầu bởi {interaction.user.display_name}")
                 await interaction.followup.send(embed=embed)
 
-            # Đánh dấu công việc đã hoàn thành
+            # Xóa tin nhắn "Đang chạy..." ban đầu để đỡ rối chat
+            await interaction.edit_original_response(content="Hoàn thành!", view=None)
+
             queue.task_done()
         except Exception as e:
             print(f"Lỗi nghiêm trọng trong worker: {e}")
-
+            try:
+                # Cố gắng thông báo lỗi cho người dùng
+                await interaction.followup.send(f"Rất tiếc {interaction.user.mention}, đã có lỗi hệ thống không mong muốn.")
+            except:
+                pass # Bỏ qua nếu không gửi được tin nhắn
 
 # --- CẤU HÌNH BOT CHÍNH ---
 class MyClient(discord.Client):
@@ -69,7 +78,7 @@ class MyClient(discord.Client):
         intents.message_content = True
         super().__init__(intents=intents)
         self.synced = False
-        self.task_queue = asyncio.Queue() # Tạo hàng đợi
+        self.task_queue = asyncio.Queue()
 
     async def on_ready(self):
         await self.wait_until_ready()
@@ -77,9 +86,7 @@ class MyClient(discord.Client):
             await tree.sync()
             self.synced = True
         
-        # Khởi động worker chạy nền khi bot sẵn sàng
         asyncio.create_task(automation_worker(self.task_queue))
-        
         print(f'✅ Bot đã đăng nhập với tên {self.user}.')
 
 client = MyClient()
@@ -94,18 +101,13 @@ keyword_choices = [
 @app_commands.describe(keyword="Chọn website bạn muốn chạy kịch bản")
 @app_commands.choices(keyword=keyword_choices)
 async def yeumoney_command(interaction: discord.Interaction, keyword: app_commands.Choice[str]):
-    # Bước 1: Phản hồi ngay lập tức (luôn thành công)
-    await interaction.response.defer(ephemeral=False, thinking=True)
+    # Bước 1: Xác nhận tương tác. Bot sẽ hiển thị "Bot is thinking..."
+    await interaction.response.defer(ephemeral=False)
     
-    # Bước 2: Thêm công việc vào hàng đợi
+    # Bước 2: Đưa công việc vào hàng đợi.
     job = (interaction, keyword.value, keyword.name)
     await client.task_queue.put(job)
     
-    # Bước 3: Gửi tin nhắn xác nhận ban đầu
-    await interaction.followup.send(
-        f"⏳ Đã nhận yêu cầu cho **{keyword.name}**! "
-        f"Bot đang xử lý trong nền, vui lòng chờ kết quả..."
-    )
+    # Hàm kết thúc ở đây. Worker sẽ xử lý phần còn lại.
 
-# Chạy bot
 client.run(DISCORD_TOKEN)
