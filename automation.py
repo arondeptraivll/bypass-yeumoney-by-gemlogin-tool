@@ -1,6 +1,6 @@
-# --- THAY ĐỔI CỐT LÕI: Sử dụng Remote WebDriver ---
+# --- THAY ĐỔI: Không cần import chromedriver_py nữa ---
 from selenium import webdriver
-# --- Các import khác giữ nguyên ---
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -67,7 +67,7 @@ def run_automation_task(keyword):
     print(f"\n🔍 Bắt đầu xử lý cho: {target['name']} ({target['url']})")
     driver = None
     try:
-        # --- KẾT NỐI ĐẾN BROWSERSTACK ---
+        # --- KẾT NỐI ĐẾN BROWSERSTACK VỚI CẤU HÌNH TƯƠNG THÍCH ---
         bs_user = os.environ.get('BS_USER')
         bs_key = os.environ.get('BS_KEY')
         
@@ -77,17 +77,19 @@ def run_automation_task(keyword):
         remote_url = f"https://{bs_user}:{bs_key}@hub-cloud.browserstack.com/wd/hub"
         
         options = webdriver.ChromeOptions()
-        # Đặt tên cho phiên làm việc để dễ theo dõi trên BrowserStack
+        # Yêu cầu một phiên bản Chrome cụ thể và ổn định
         bstack_options = {
             "os": "Windows",
-            "osVersion": "10",
-            "browserVersion": "latest",
+            "osVersion": "11",
+            "browserName": "Chrome",
+            "browserVersion": "125.0", # Yêu cầu phiên bản cụ thể
             "sessionName": f"Yeumoney Task - {keyword}"
         }
         options.set_capability('bstack:options', bstack_options)
 
-        print(f"Đang kết nối đến trình duyệt từ xa tại BrowserStack...")
+        print(f"Đang kết nối đến trình duyệt từ xa (Chrome 125) tại BrowserStack...")
         
+        # Selenium sẽ tự động xử lý driver phù hợp cho phiên bản này
         driver = webdriver.Remote(
             command_executor=remote_url,
             options=options
