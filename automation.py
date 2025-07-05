@@ -1,5 +1,6 @@
+# --- THAY ĐỔI CỐT LÕI: Sử dụng Remote WebDriver ---
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
+# --- Các import khác giữ nguyên ---
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -7,7 +8,6 @@ import time
 import random
 import os
 from urllib.parse import urlparse
-import chromedriver_py
 
 # ================= CẤU HÌNH =================
 KEYWORD_MAP = {
@@ -67,36 +67,33 @@ def run_automation_task(keyword):
     print(f"\n🔍 Bắt đầu xử lý cho: {target['name']} ({target['url']})")
     driver = None
     try:
-        # --- CẤU HÌNH CHỐNG CRASH TRÊN DOCKER ---
+        # --- KẾT NỐI ĐẾN BROWSERSTACK ---
+        bs_user = os.environ.get('BS_USER')
+        bs_key = os.environ.get('BS_KEY')
+        
+        if not bs_user or not bs_key:
+            raise Exception("Chưa thiết lập biến môi trường BS_USER và BS_KEY trên Railway.")
+            
+        remote_url = f"https://{bs_user}:{bs_key}@hub-cloud.browserstack.com/wd/hub"
+        
         options = webdriver.ChromeOptions()
+        # Đặt tên cho phiên làm việc để dễ theo dõi trên BrowserStack
+        bstack_options = {
+            "os": "Windows",
+            "osVersion": "10",
+            "browserVersion": "latest",
+            "sessionName": f"Yeumoney Task - {keyword}"
+        }
+        options.set_capability('bstack:options', bstack_options)
+
+        print(f"Đang kết nối đến trình duyệt từ xa tại BrowserStack...")
         
-        # Cờ quan trọng nhất để giải quyết vấn đề /dev/shm
-        options.add_argument("--disable-dev-shm-usage") 
+        driver = webdriver.Remote(
+            command_executor=remote_url,
+            options=options
+        )
         
-        # Các cờ bắt buộc khác cho môi trường headless/docker
-        options.add_argument("--headless=new")
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-gpu")
-        
-        # Các cờ tối ưu hóa tài nguyên
-        options.add_argument("--disable-extensions")
-        options.add_argument("--disable-infobars")
-        options.add_argument("--single-process")
-        options.add_argument("--window-size=1920,1080")
-        
-        # Sử dụng đường dẫn thật của trình duyệt
-        browser_path = "/opt/google/chrome/google-chrome"
-        options.binary_location = browser_path
-        
-        service = Service(executable_path=chromedriver_py.binary_path)
-        
-        print(f"Đường dẫn trình duyệt (THẬT): {options.binary_location}")
-        print(f"Đường dẫn driver: {service.path}")
-        print("Đang khởi tạo trình duyệt với cấu hình chống crash...")
-        
-        driver = webdriver.Chrome(service=service, options=options)
-        
-        print("✅ TRÌNH DUYỆT ĐÃ KHỞI ĐỘNG THÀNH CÔNG!")
+        print("✅ KẾT NỐI TRÌNH DUYỆT TỪ XA THÀNH CÔNG!")
         
         print("🌐 Đang truy cập Google...")
         driver.get("https://www.google.com")
@@ -134,4 +131,4 @@ def run_automation_task(keyword):
     finally:
         if driver:
             driver.quit()
-            print("✅ Đã đóng trình duyệt.")
+            print("✅ Đã đóng phiên làm việc từ xa.")
