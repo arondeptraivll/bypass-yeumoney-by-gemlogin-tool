@@ -9,7 +9,7 @@ import os
 from urllib.parse import urlparse
 import chromedriver_py
 
-# ================= CẤU HÌNH =================
+# ================= CẤU HÌNH (Không đổi) =================
 KEYWORD_MAP = {
     "m88": {"name": "m88", "url": "bet88ec.com"},
     "w88": {"name": "w88", "url": "188.166.185.213"},
@@ -23,7 +23,7 @@ JS_FILE = "speedup.js"
 UNWANTED_LINKS = ["#", "javascript:", "logout", "signout", "tel:", "mailto:"]
 BUTTON_XPATH = "//*[@id='layma_me_vuatraffic']"
 
-# ================= TIỆN ÍCH =================
+# ================= TIỆN ÍCH (Không đổi) =================
 def is_valid_link(href, domain):
     if not href: return False
     if any(unwanted in href.lower() for unwanted in UNWANTED_LINKS): return False
@@ -59,6 +59,7 @@ def click_with_js_injection(driver, step_name):
         return True
     except Exception as e: print(f"❌ Lỗi {step_name}: {str(e)}"); return False
 
+
 # ================= HÀM CHÍNH ĐỂ BOT GỌI =================
 def run_automation_task(keyword):
     if keyword not in KEYWORD_MAP:
@@ -69,13 +70,27 @@ def run_automation_task(keyword):
 
     driver = None
     try:
+        # --- CẤU HÌNH "SIÊU TIẾT KIỆM" ---
         options = webdriver.ChromeOptions()
+        # Các cờ bắt buộc cho môi trường Docker/Linux
+        options.add_argument("--headless=new")
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--headless=new")
         options.add_argument("--disable-gpu")
         
-        # Sử dụng đường dẫn thật của trình duyệt đã được khám nghiệm
+        # Các cờ bổ sung để giảm thiểu tài nguyên
+        options.add_argument("--disable-extensions")
+        options.add_argument("--disable-infobars")
+        options.add_argument("--disable-popup-blocking")
+        options.add_argument("--disable-notifications")
+        options.add_argument("--disable-background-networking")
+        options.add_argument("--disable-sync")
+        options.add_argument("--disable-translate")
+        options.add_argument("--disable-setuid-sandbox")
+        options.add_argument("--single-process") # Rất quan trọng để giảm bộ nhớ
+        options.add_argument("--window-size=1920,1080")
+        
+        # Sử dụng đường dẫn thật của trình duyệt
         browser_path = "/opt/google/chrome/google-chrome"
         options.binary_location = browser_path
         
@@ -83,10 +98,13 @@ def run_automation_task(keyword):
         
         print(f"Đường dẫn trình duyệt (THẬT): {options.binary_location}")
         print(f"Đường dẫn driver: {service.path}")
+        print("Đang khởi tạo trình duyệt với cấu hình 'siêu tiết kiệm'...")
         
         driver = webdriver.Chrome(service=service, options=options)
         
         print("✅ TRÌNH DUYỆT ĐÃ KHỞI ĐỘNG THÀNH CÔNG!")
+        
+        # ... (phần còn lại của hàm giữ nguyên) ...
         print("🌐 Đang truy cập Google...")
         driver.get("https://www.google.com")
         
