@@ -22,7 +22,6 @@ UNWANTED_LINKS = ["#", "javascript:", "logout", "signout", "tel:", "mailto:"]
 BUTTON_XPATH = "//*[@id='layma_me_vuatraffic']" 
 
 # ================= TIỆN ÍCH (Không đổi) =================
-# ... (Giữ nguyên các hàm tiện ích)
 def is_valid_link(href, domain):
     if not href: return False
     if any(unwanted in href.lower() for unwanted in UNWANTED_LINKS): return False
@@ -80,21 +79,18 @@ def run_automation_task(keyword):
         search_box.send_keys(f"site:{target['url']}")
         search_box.submit()
         
-        # --- THAY ĐỔI CHIẾN LƯỢC TẠI ĐÂY ---
         print("...Chờ trang kết quả của Google ổn định...")
-        time.sleep(5) # Tăng thời gian chờ lên 5 giây
+        time.sleep(5)
 
-        print("🔗 Đang tìm kết quả tìm kiếm với XPath chính xác hơn...")
-        # Sử dụng XPath mạnh mẽ hơn, nhắm vào link có chứa tiêu đề h3
-        first_result_xpath = "//div[@id='search']//a[h3]"
+        # <<< SỬ DỤNG XPATH CHÍNH XÁC BẠN CUNG CẤP >>>
+        print("🔗 Đang tìm kết quả tìm kiếm với XPath bạn đã cung cấp...")
+        first_result_xpath = "//*[@id='rso']/div[1]/div/div/div/div[1]/div/div/span/a"
         
-        # Chờ cho đến khi phần tử có thể nhìn thấy được
         first_result = WebDriverWait(driver, 20).until(
-            EC.visibility_of_element_located((By.XPATH, first_result_xpath))
+            EC.element_to_be_clickable((By.XPATH, first_result_xpath))
         )
         
-        print("Sử dụng JavaScript để thực hiện cú click 'bất khả chiến bại'...")
-        # Sử dụng JavaScript để click, tránh các lớp phủ vô hình
+        print("Sử dụng JavaScript để thực hiện cú click chính xác...")
         driver.execute_script("arguments[0].click();", first_result)
         
         print("✅ Đã click thành công vào kết quả tìm kiếm. Chờ trang đích tải...")
@@ -127,7 +123,6 @@ def run_automation_task(keyword):
         print(error_message)
         if driver:
             try:
-                # Cố gắng chụp ảnh màn hình để chẩn đoán
                 screenshot_name = f"debug_error_{int(time.time())}.png"
                 driver.save_screenshot(screenshot_name)
                 print(f"Đã lưu ảnh lỗi vào {screenshot_name} (Lưu ý: trên server sẽ không thể lấy file này về)")
