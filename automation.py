@@ -1,8 +1,5 @@
-# --- THAY ĐỔI CỐT LÕI ---
-from selenium import webdriver  # Sử dụng thư viện Selenium chuẩn
-from selenium.webdriver.chrome.service import Service  # Cần để quản lý driver
-# -------------------------
-
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -28,60 +25,39 @@ BUTTON_XPATH = "//*[@id='layma_me_vuatraffic']"
 
 # ================= TIỆN ÍCH =================
 def is_valid_link(href, domain):
-    if not href:
-        return False
-    if any(unwanted in href.lower() for unwanted in UNWANTED_LINKS):
-        return False
+    if not href: return False
+    if any(unwanted in href.lower() for unwanted in UNWANTED_LINKS): return False
     parsed = urlparse(href)
-    return ((not parsed.netloc or parsed.netloc == domain) and
-            not href.startswith(('javascript:', 'mailto:', 'tel:')))
+    return ((not parsed.netloc or parsed.netloc == domain) and not href.startswith(('javascript:', 'mailto:', 'tel:')))
 
 def get_internal_links(driver):
     try:
-        current_url = driver.current_url
-        domain = urlparse(current_url).netloc
+        domain = urlparse(driver.current_url).netloc
         all_links = driver.find_elements(By.XPATH, "//a[@href]")
-        valid_links = []
-        for link in all_links:
-            try:
-                href = link.get_attribute('href')
-                if is_valid_link(href, domain) and link.is_displayed() and link.is_enabled():
-                    valid_links.append(link)
-            except:
-                continue
+        valid_links = [link for link in all_links if is_valid_link(link.get_attribute('href'), domain) and link.is_displayed() and link.is_enabled()]
         return valid_links
     except Exception as e:
-        print(f"❌ Lỗi khi lấy link: {str(e)}")
-        return []
+        print(f"❌ Lỗi khi lấy link: {str(e)}"); return []
 
 def inject_js(driver):
     try:
-        if not os.path.exists(JS_FILE):
-            print(f"⚠️ File {JS_FILE} không tồn tại")
-            return False
-        with open(JS_FILE, 'r') as f:
-            js_code = f.read()
-            driver.execute_script(js_code)
-            return True
-    except Exception as e:
-        print(f"❌ Lỗi inject JS: {str(e)}")
-        return False
+        if not os.path.exists(JS_FILE): print(f"⚠️ File {JS_FILE} không tồn tại"); return False
+        with open(JS_FILE, 'r') as f: driver.execute_script(f.read())
+        return True
+    except Exception as e: print(f"❌ Lỗi inject JS: {str(e)}"); return False
 
 def click_with_js_injection(driver, step_name):
     print(f"💉 Đang inject JS cho {step_name}...")
     inject_js(driver)
     print(f"🖱️ Đang click {step_name}...")
     try:
-        button = WebDriverWait(driver, 20).until(
-            EC.element_to_be_clickable((By.XPATH, BUTTON_XPATH)))
+        button = WebDriverWait(driver, 20).until(EC.element_to_be_clickable((By.XPATH, BUTTON_XPATH)))
         driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", button)
         time.sleep(0.5)
         driver.execute_script("arguments[0].click();", button)
         print(f"✅ {step_name} thành công")
         return True
-    except Exception as e:
-        print(f"❌ Lỗi {step_name}: {str(e)}")
-        return False
+    except Exception as e: print(f"❌ Lỗi {step_name}: {str(e)}"); return False
 
 # ================= HÀM CHÍNH ĐỂ BOT GỌI =================
 def run_automation_task(keyword):
@@ -93,26 +69,19 @@ def run_automation_task(keyword):
 
     driver = None
     try:
-        # --- THAY ĐỔI CÁCH KHỞI TẠO DRIVER ---
         options = webdriver.ChromeOptions()
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--headless=new")
         options.add_argument("--disable-gpu")
-        
-        # Chỉ định rõ ràng đường dẫn đến trình duyệt
         browser_path = "/usr/bin/google-chrome-stable"
         options.binary_location = browser_path
-        
-        # Tạo một Service object để quản lý chromedriver
         service = Service(executable_path=chromedriver_py.binary_path)
         
         print(f"Đường dẫn trình duyệt: {options.binary_location}")
         print(f"Đường dẫn driver: {service.path}")
         
-        # Khởi tạo driver bằng Selenium chuẩn
         driver = webdriver.Chrome(service=service, options=options)
-        # --- KẾT THÚC THAY ĐỔI ---
         
         print("✅ TRÌNH DUYỆT ĐÃ KHỞI ĐỘNG THÀNH CÔNG!")
         print("🌐 Đang truy cập Google...")
@@ -159,15 +128,6 @@ def run_automation_task(keyword):
     except Exception as e:
         error_message = f"❌ CÓ LỖI: {str(e)}"
         print(error_message)
-        if driver:
-            os.makedirs("debug", exist_ok=True)
-            timestamp = int(time.time())
-            screenshot_path = f"debug/error_{timestamp}.png"
-            try:
-                driver.save_screenshot(screenshot_path)
-                print(f"Đã lưu ảnh lỗi vào {screenshot_path}")
-            except Exception as screenshot_error:
-                print(f"Không thể lưu ảnh lỗi: {screenshot_error}")
         return {"status": "error", "message": str(e)}
     finally:
         if driver:
