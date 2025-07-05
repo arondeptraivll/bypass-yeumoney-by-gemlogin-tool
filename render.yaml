@@ -1,0 +1,23 @@
+# render.yaml
+services:
+  - type: worker # Loại dịch vụ là worker, chạy nền, không cần cổng web
+    name: yeumoney-bot
+    env: python
+    buildCommand: |
+      pip install --upgrade pip
+      pip install -r requirements.txt
+      # Cài đặt các gói hệ thống cần thiết cho Chrome/Chromium
+      apt-get update && apt-get install -y libglib2.0-0 libnss3 libgconf-2-4 libfontconfig1 chromium-browser
+    startCommand: python bot.py
+    envVars:
+      - key: DISCORD_TOKEN
+        fromService:
+          type: secret_file
+          name: discord_token_secret
+          key: token
+      - key: UC_DRIVER_EXE
+        value: /usr/bin/chromium-browser # Chỉ định đường dẫn tới trình duyệt trên server Render
+
+secrets:
+  - key: discord_token_secret
+    name: discord-token-for-bot
