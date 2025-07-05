@@ -9,7 +9,7 @@ import os
 from urllib.parse import urlparse
 import chromedriver_py
 
-# ================= CẤU HÌNH (Không đổi) =================
+# ================= CẤU HÌNH =================
 KEYWORD_MAP = {
     "m88": {"name": "m88", "url": "bet88ec.com"},
     "w88": {"name": "w88", "url": "188.166.185.213"},
@@ -23,7 +23,7 @@ JS_FILE = "speedup.js"
 UNWANTED_LINKS = ["#", "javascript:", "logout", "signout", "tel:", "mailto:"]
 BUTTON_XPATH = "//*[@id='layma_me_vuatraffic']"
 
-# ================= TIỆN ÍCH (Không đổi) =================
+# ================= TIỆN ÍCH =================
 def is_valid_link(href, domain):
     if not href: return False
     if any(unwanted in href.lower() for unwanted in UNWANTED_LINKS): return False
@@ -59,35 +59,24 @@ def click_with_js_injection(driver, step_name):
         return True
     except Exception as e: print(f"❌ Lỗi {step_name}: {str(e)}"); return False
 
-
 # ================= HÀM CHÍNH ĐỂ BOT GỌI =================
 def run_automation_task(keyword):
     if keyword not in KEYWORD_MAP:
         return {"status": "error", "message": f"Từ khóa không hợp lệ: {keyword}"}
-
     target = KEYWORD_MAP[keyword]
     print(f"\n🔍 Bắt đầu xử lý cho: {target['name']} ({target['url']})")
-
     driver = None
     try:
         # --- CẤU HÌNH "SIÊU TIẾT KIỆM" ---
         options = webdriver.ChromeOptions()
-        # Các cờ bắt buộc cho môi trường Docker/Linux
         options.add_argument("--headless=new")
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-gpu")
-        
-        # Các cờ bổ sung để giảm thiểu tài nguyên
         options.add_argument("--disable-extensions")
         options.add_argument("--disable-infobars")
         options.add_argument("--disable-popup-blocking")
-        options.add_argument("--disable-notifications")
-        options.add_argument("--disable-background-networking")
-        options.add_argument("--disable-sync")
-        options.add_argument("--disable-translate")
-        options.add_argument("--disable-setuid-sandbox")
-        options.add_argument("--single-process") # Rất quan trọng để giảm bộ nhớ
+        options.add_argument("--single-process")
         options.add_argument("--window-size=1920,1080")
         
         # Sử dụng đường dẫn thật của trình duyệt
@@ -103,8 +92,6 @@ def run_automation_task(keyword):
         driver = webdriver.Chrome(service=service, options=options)
         
         print("✅ TRÌNH DUYỆT ĐÃ KHỞI ĐỘNG THÀNH CÔNG!")
-        
-        # ... (phần còn lại của hàm giữ nguyên) ...
         print("🌐 Đang truy cập Google...")
         driver.get("https://www.google.com")
         
@@ -112,37 +99,25 @@ def run_automation_task(keyword):
         search_box.send_keys(f"site:{target['url']}")
         search_box.submit()
         time.sleep(2)
-
         print("🔗 Đang chọn kết quả tìm kiếm...")
         first_result = WebDriverWait(driver, 20).until(EC.element_to_be_clickable((By.XPATH, "//div[@id='search']//a")))
         first_result.click()
         time.sleep(3)
-
-        if not click_with_js_injection(driver, "nút lần 1"):
-            raise Exception("Thất bại ở bước 1: Click nút lần 1")
+        if not click_with_js_injection(driver, "nút lần 1"): raise Exception("Thất bại ở bước 1")
         time.sleep(3)
-
         print("🎲 Đang tìm link nội bộ...")
         internal_links = get_internal_links(driver)
-        if not internal_links:
-            raise Exception("Không tìm thấy link nội bộ hợp lệ")
-        
+        if not internal_links: raise Exception("Không tìm thấy link nội bộ")
         chosen_link = random.choice(internal_links)
         print(f"👉 Chọn link: {chosen_link.get_attribute('href')}")
         driver.execute_script("arguments[0].click();", chosen_link)
         time.sleep(3)
-
-        if not click_with_js_injection(driver, "nút lần 2"):
-            raise Exception("Thất bại ở bước 2: Click nút lần 2")
+        if not click_with_js_injection(driver, "nút lần 2"): raise Exception("Thất bại ở bước 2")
         time.sleep(4)
-
         print("🔢 Đang lấy mã...")
         code_element = WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.XPATH, BUTTON_XPATH)))
         code = code_element.text or code_element.get_attribute('value') or code_element.get_attribute('innerHTML')
-        
-        if not code or not code.strip():
-             raise Exception("Lấy được mã rỗng hoặc không hợp lệ.")
-
+        if not code or not code.strip(): raise Exception("Lấy được mã rỗng")
         print(f"✨ THÀNH CÔNG | MÃ: {code.strip()}")
         return {"status": "success", "data": code.strip()}
 
