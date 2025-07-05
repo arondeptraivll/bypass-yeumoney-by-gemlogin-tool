@@ -21,7 +21,7 @@ JS_FILE = "speedup.js"
 UNWANTED_LINKS = ["#", "javascript:", "logout", "signout", "tel:", "mailto:"]
 BUTTON_XPATH = "//*[@id='layma_me_vuatraffic']"
 
-# ================= TIỆN ÍCH (đã được sửa đổi một chút) =================
+# ================= TIỆN ÍCH (Không đổi) =================
 def is_valid_link(href, domain):
     if not href:
         return False
@@ -37,7 +37,6 @@ def get_internal_links(driver):
         domain = urlparse(current_url).netloc
         all_links = driver.find_elements(By.XPATH, "//a[@href]")
         valid_links = []
-        
         for link in all_links:
             try:
                 href = link.get_attribute('href')
@@ -66,7 +65,6 @@ def inject_js(driver):
 def click_with_js_injection(driver, step_name):
     print(f"💉 Đang inject JS cho {step_name}...")
     inject_js(driver)
-    
     print(f"🖱️ Đang click {step_name}...")
     try:
         button = WebDriverWait(driver, 20).until(
@@ -80,17 +78,8 @@ def click_with_js_injection(driver, step_name):
         print(f"❌ Lỗi {step_name}: {str(e)}")
         return False
 
-# ================= HÀM CHÍNH ĐỂ BOT GỌI =================
+# ================= HÀM CHÍNH ĐỂ BOT GỌI (Đã cập nhật) =================
 def run_automation_task(keyword):
-    """
-    Hàm chính thực hiện tác vụ tự động hóa.
-    Args:
-        keyword (str): Từ khóa người dùng chọn (ví dụ: 'm88').
-    Returns:
-        dict: Một dictionary chứa status và message/data.
-              {'status': 'success', 'data': 'MÃ_LẤY_ĐƯỢC'}
-              {'status': 'error', 'message': 'Lý do lỗi'}
-    """
     if keyword not in KEYWORD_MAP:
         return {"status": "error", "message": f"Từ khóa không hợp lệ: {keyword}"}
 
@@ -99,38 +88,41 @@ def run_automation_task(keyword):
 
     driver = None
     try:
-        # Khởi tạo trình duyệt
+        # --- THAY ĐỔI Ở ĐÂY ---
         options = uc.ChromeOptions()
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--start-maximized")
-        options.add_argument("--headless=new") # Chạy ở chế độ không giao diện trên server
+        options.add_argument("--headless=new")
+
+        # Đọc đường dẫn trình duyệt từ biến môi trường
+        # Đây là dòng quan trọng để sửa lỗi
+        browser_executable_path = os.environ.get("UC_DRIVER_EXE")
+        if browser_executable_path:
+            print(f"Sử dụng trình duyệt tại: {browser_executable_path}")
+            options.binary_location = browser_executable_path
+        else:
+            print("Không tìm thấy biến môi trường UC_DRIVER_EXE, sử dụng mặc định.")
+            
         driver = uc.Chrome(options=options)
+        # --- KẾT THÚC THAY ĐỔI ---
         
-        # 1. Truy cập qua Google
         print("🌐 Đang truy cập Google...")
         driver.get("https://www.google.com")
-        search_box = WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located((By.NAME, 'q'))
-        )
+        search_box = WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.NAME, 'q')))
         search_box.send_keys(f"site:{target['url']}")
         search_box.submit()
         time.sleep(2)
 
-        # 2. Click kết quả đầu tiên
         print("🔗 Đang chọn kết quả tìm kiếm...")
-        first_result = WebDriverWait(driver, 20).until(
-            EC.element_to_be_clickable((By.XPATH, "//div[@id='search']//a"))
-        )
+        first_result = WebDriverWait(driver, 20).until(EC.element_to_be_clickable((By.XPATH, "//div[@id='search']//a")))
         first_result.click()
         time.sleep(3)
 
-        # 3. Xử lý LẦN 1
         if not click_with_js_injection(driver, "nút lần 1"):
             raise Exception("Thất bại ở bước 1: Click nút lần 1")
         time.sleep(3)
 
-        # 4. Vào link nội bộ
         print("🎲 Đang tìm link nội bộ...")
         internal_links = get_internal_links(driver)
         if not internal_links:
@@ -141,16 +133,12 @@ def run_automation_task(keyword):
         driver.execute_script("arguments[0].click();", chosen_link)
         time.sleep(3)
 
-        # 5. Xử lý LẦN 2
         if not click_with_js_injection(driver, "nút lần 2"):
             raise Exception("Thất bại ở bước 2: Click nút lần 2")
         time.sleep(4)
 
-        # 6. Lấy mã cuối cùng
         print("🔢 Đang lấy mã...")
-        code_element = WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located((By.XPATH, BUTTON_XPATH))
-        )
+        code_element = WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.XPATH, BUTTON_XPATH)))
         code = code_element.text or code_element.get_attribute('value') or code_element.get_attribute('innerHTML')
         
         if not code or not code.strip():
@@ -166,8 +154,11 @@ def run_automation_task(keyword):
             os.makedirs("debug", exist_ok=True)
             timestamp = int(time.time())
             screenshot_path = f"debug/error_{timestamp}.png"
-            driver.save_screenshot(screenshot_path)
-            print(f"Đã lưu ảnh lỗi vào {screenshot_path}")
+            try:
+                driver.save_screenshot(screenshot_path)
+                print(f"Đã lưu ảnh lỗi vào {screenshot_path}")
+            except Exception as screenshot_error:
+                print(f"Không thể lưu ảnh lỗi: {screenshot_error}")
         return {"status": "error", "message": str(e)}
     finally:
         if driver:
