@@ -69,14 +69,22 @@ def run_automation_task(keyword):
     try:
         # --- CẤU HÌNH "SIÊU TIẾT KIỆM" ---
         options = webdriver.ChromeOptions()
+        # Các cờ bắt buộc cho môi trường Docker/Linux
         options.add_argument("--headless=new")
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-gpu")
+        
+        # Các cờ bổ sung để giảm thiểu tài nguyên
         options.add_argument("--disable-extensions")
         options.add_argument("--disable-infobars")
         options.add_argument("--disable-popup-blocking")
-        options.add_argument("--single-process")
+        options.add_argument("--disable-notifications")
+        options.add_argument("--disable-background-networking")
+        options.add_argument("--disable-sync")
+        options.add_argument("--disable-translate")
+        options.add_argument("--disable-setuid-sandbox")
+        options.add_argument("--single-process") # Rất quan trọng để giảm bộ nhớ
         options.add_argument("--window-size=1920,1080")
         
         # Sử dụng đường dẫn thật của trình duyệt
@@ -92,6 +100,7 @@ def run_automation_task(keyword):
         driver = webdriver.Chrome(service=service, options=options)
         
         print("✅ TRÌNH DUYỆT ĐÃ KHỞI ĐỘNG THÀNH CÔNG!")
+        
         print("🌐 Đang truy cập Google...")
         driver.get("https://www.google.com")
         
