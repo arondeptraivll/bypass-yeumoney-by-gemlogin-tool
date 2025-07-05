@@ -3,9 +3,10 @@ from discord import app_commands
 import os
 import asyncio
 from dotenv import load_dotenv
+from aiohttp import web
 
-# Chỉ import biến cấu hình nhẹ
-from automation import KEYWORD_MAP
+# Import các thành phần từ file khác
+from automation import KEYWORD_MAP, run_automation_task
 
 load_dotenv()
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
@@ -15,13 +16,7 @@ if not DISCORD_TOKEN:
 
 # --- TÁC VỤ NỀN ĐỂ XỬ LÝ HÀNG ĐỢI ---
 async def automation_worker(queue: asyncio.Queue):
-    """
-    "Người làm việc" chạy nền vĩnh viễn.
-    Nó chờ đợi công việc trong hàng đợi và xử lý chúng.
-    """
-    from automation import run_automation_task
     print("✅ Worker tự động hóa đã sẵn sàng.")
-
     while True:
         try:
             interaction, keyword_value, keyword_name = await queue.get()
@@ -34,44 +29,32 @@ async def automation_worker(queue: asyncio.Queue):
 
             # Chạy tác vụ blocking (Selenium)
             loop = asyncio.get_running_loop()
-            result = await loop.run_in_executor(
-                None, run_automation_task, keyword_value
-            )
+            result = await loop.run_in_executor(None, run_automation_task, keyword_value)
             
             # Gửi kết quả bằng một tin nhắn followup mới
             if result['status'] == 'success':
-                embed = discord.Embed(
-                    title=f"✅ Lấy mã thành công cho {keyword_name}!",
-                    description=f"Mã của bạn là:",
-                    color=discord.Color.green()
-                )
+                embed = discord.Embed(title=f"✅ Lấy mã thành công cho {keyword_name}!", description="Mã của bạn là:", color=discord.Color.green())
                 embed.add_field(name="🔑 MÃ", value=f"```\n{result['data']}\n```", inline=False)
                 embed.set_footer(text=f"Yêu cầu bởi {interaction.user.display_name}")
                 await interaction.followup.send(embed=embed)
             else:
-                embed = discord.Embed(
-                    title=f"❌ Lỗi khi lấy mã cho {keyword_name}",
-                    description="Đã có lỗi xảy ra trong quá trình tự động hóa.",
-                    color=discord.Color.red()
-                )
+                embed = discord.Embed(title=f"❌ Lỗi khi lấy mã cho {keyword_name}", description="Đã có lỗi xảy ra trong quá trình tự động hóa.", color=discord.Color.red())
                 error_message = result['message'][:1000]
                 embed.add_field(name="Chi tiết lỗi", value=f"```{error_message}```", inline=False)
                 embed.set_footer(text=f"Yêu cầu bởi {interaction.user.display_name}")
                 await interaction.followup.send(embed=embed)
-
+            
             # Xóa tin nhắn "Đang chạy..." ban đầu để đỡ rối chat
-            await interaction.edit_original_response(content="Hoàn thành!", view=None)
-
+            await interaction.edit_original_response(content=f"Đã xử lý xong yêu cầu cho **{keyword_name}**.", view=None)
             queue.task_done()
         except Exception as e:
             print(f"Lỗi nghiêm trọng trong worker: {e}")
             try:
-                # Cố gắng thông báo lỗi cho người dùng
                 await interaction.followup.send(f"Rất tiếc {interaction.user.mention}, đã có lỗi hệ thống không mong muốn.")
             except:
-                pass # Bỏ qua nếu không gửi được tin nhắn
+                pass
 
-# --- CẤU HÌNH BOT CHÍNH ---
+# --- CẤU HÌNH BOT CHÍNH VÀ WEB SERVER ---
 class MyClient(discord.Client):
     def __init__(self):
         intents = discord.Intents.default()
@@ -79,9 +62,14 @@ class MyClient(discord.Client):
         super().__init__(intents=intents)
         self.synced = False
         self.task_queue = asyncio.Queue()
+        self.web_app = web.Application()
+        self.web_app.add_routes([web.get('/health', self.health_check)])
 
-    async def on_ready(self):
-        await self.wait_until_ready()
+    async def health_check(self, request):
+        print("Pinged! Bot is alive.")
+        return web.Response(text="OK", status=200)
+
+    async def setup_hook(self):
         if not self.synced:
             await tree.sync()
             self.synced = True
@@ -92,14 +80,9 @@ class MyClient(discord.Client):
 client = MyClient()
 tree = app_commands.CommandTree(client)
 
-keyword_choices = [
-    app_commands.Choice(name=data['name'], value=key)
-    for key, data in KEYWORD_MAP.items()
-]
-
 @tree.command(name="yeumoney", description="Chạy kịch bản lấy mã từ một website được chọn")
 @app_commands.describe(keyword="Chọn website bạn muốn chạy kịch bản")
-@app_commands.choices(keyword=keyword_choices)
+@app_commands.choices(keyword=[app_commands.Choice(name=data['name'], value=key) for key, data in KEYWORD_MAP.items()])
 async def yeumoney_command(interaction: discord.Interaction, keyword: app_commands.Choice[str]):
     # Bước 1: Xác nhận tương tác. Bot sẽ hiển thị "Bot is thinking..."
     await interaction.response.defer(ephemeral=False)
@@ -108,6 +91,22 @@ async def yeumoney_command(interaction: discord.Interaction, keyword: app_comman
     job = (interaction, keyword.value, keyword.name)
     await client.task_queue.put(job)
     
-    # Hàm kết thúc ở đây. Worker sẽ xử lý phần còn lại.
+    # Bước 3: Thông báo đã nhận yêu cầu
+    await interaction.edit_original_response(content=f"Đã nhận yêu cầu cho **{keyword.name}** và đưa vào hàng đợi xử lý!")
 
-client.run(DISCORD_TOKEN)
+async def main():
+    port = int(os.environ.get('PORT', 10000))
+    runner = web.AppRunner(client.web_app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    
+    await asyncio.gather(
+        client.start(DISCORD_TOKEN),
+        site.start()
+    )
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("Bot đang tắt...")
