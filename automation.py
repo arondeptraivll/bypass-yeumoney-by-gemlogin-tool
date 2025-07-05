@@ -24,7 +24,6 @@ JS_FILE = "speedup.js"
 PROXY_FILE = "proxies.txt"
 UNWANTED_LINKS = ["#", "javascript:", "logout", "signout", "tel:", "mailto:"]
 BUTTON_XPATH = "//*[@id='layma_me_vuatraffic']" 
-TEST_KEYWORD = "vnexpress" # Từ khóa an toàn để kiểm tra proxy
 
 # ================= TIỆN ÍCH =================
 def load_proxies(filename=PROXY_FILE):
@@ -70,18 +69,21 @@ def run_automation_task(keyword):
         return {"status": "error", "message": f"Từ khóa không hợp lệ: {keyword}"}
     
     target = KEYWORD_MAP[keyword]
-    proxies = load_proxies()
+    try:
+        proxies = load_proxies()
+    except (FileNotFoundError, ValueError) as e:
+        return {"status": "error", "message": str(e)}
+
     random.shuffle(proxies)
     
-    driver = None
-    successful_proxy = None
-
-    # --- VÒNG LẶP THỬ PROXY ---
+    # --- VÒNG LẶP THỬ-SAI-LÀM-LẠI ---
     for i, proxy_url in enumerate(proxies):
         print("\n" + "="*50)
-        print(f"🔄 Vòng lặp {i+1}/{len(proxies)}. Đang thử proxy: {proxy_url}")
+        print(f"🔄 Vòng lặp {i+1}/{len(proxies)}. Thử thực hiện tác vụ với proxy: {proxy_url}")
         
+        driver = None # Đảm bảo driver được reset cho mỗi vòng lặp
         try:
+            # --- Bước 1: Khởi tạo trình duyệt với proxy hiện tại ---
             options = webdriver.ChromeOptions()
             options.add_argument(f'--proxy-server={proxy_url}')
             options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36")
@@ -91,96 +93,64 @@ def run_automation_task(keyword):
 
             bs_user = os.environ.get('BS_USER')
             bs_key = os.environ.get('BS_KEY')
+            if not bs_user or not bs_key:
+                # Nếu không có thông tin BS, báo lỗi và dừng hẳn
+                return {"status": "error", "message": "Thiếu biến môi trường BS_USER hoặc BS_KEY."}
+
             remote_url = f"https://{bs_user}:{bs_key}@hub-cloud.browserstack.com/wd/hub"
-            bstack_options = {"os": "Windows", "osVersion": "11", "browserName": "Chrome", "browserVersion": "latest", "sessionName": f"Proxy Test {i+1} - {keyword}"}
+            bstack_options = {"os": "Windows", "osVersion": "11", "browserName": "Chrome", "browserVersion": "latest", "sessionName": f"Task Attempt {i+1} - {keyword}"}
             options.set_capability('bstack:options', bstack_options)
 
             print("Đang kết nối đến trình duyệt từ xa...")
             driver = webdriver.Remote(command_executor=remote_url, options=options)
-            driver.set_page_load_timeout(45)
+            driver.set_page_load_timeout(60) # Tăng timeout để cho proxy yếu có cơ hội
             
-            # --- KIỂM TRA CHỦ ĐỘNG (ACTIVE TEST) ---
-            print(f"🔬 Đang thực hiện kiểm tra chủ động với từ khóa '{TEST_KEYWORD}'...")
+            # --- Bước 2: Thử thực hiện toàn bộ tác vụ ---
+            print("🌐 Truy cập Google để tìm kiếm mục tiêu...")
             driver.get("https://www.google.com")
             
-            # 1. Tìm kiếm
-            test_search_box = WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.NAME, 'q')))
-            test_search_box.send_keys(TEST_KEYWORD)
-            test_search_box.submit()
-            
-            # 2. Tìm kết quả đầu tiên
-            test_first_result = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, "//div[@id='search']//a[h3]")))
-            
-            # 3. Click thử
-            driver.execute_script("arguments[0].click();", test_first_result)
-            time.sleep(4) # Chờ trình duyệt điều hướng
+            search_box = WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.NAME, 'q')))
+            search_query = f"site:{target['url']}"
+            search_box.send_keys(search_query)
+            search_box.submit()
+            print(f"...Đã tìm kiếm '{search_query}'.")
 
-            # 4. Kiểm tra kết quả
-            if "google.com/search" in driver.current_url:
-                raise ValueError("Click thất bại, vẫn ở trang Google. Proxy bị CAPTCHA ẩn.")
-            
-            print(f"✅ Proxy VƯỢT QUA bài kiểm tra! Đang ở trang: {driver.current_url[:50]}...")
-            successful_proxy = proxy_url
-            break 
+            # Nếu bị CAPTCHA, bước này sẽ timeout
+            first_result = WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.XPATH, "//div[@id='search']//a[h3]")))
+            driver.execute_script("arguments[0].click();", first_result)
+            print("✅ Đã click vào kết quả tìm kiếm. Chờ trang đích tải...")
+            time.sleep(7) 
 
-        except (TimeoutException, WebDriverException, ValueError) as e:
-            print(f"❌ Proxy {proxy_url} thất bại: {str(e)[:200]}")
+            # Các bước còn lại
+            if not execute_js_action(driver, "lần 1"): raise Exception("Thất bại ở bước 1: Inject JS lần 1")
+            
+            internal_links = get_internal_links(driver)
+            if not internal_links: raise Exception("Không tìm thấy link nội bộ hợp lệ.")
+            
+            chosen_link = random.choice(internal_links)
+            print(f"👉 Chọn link: {chosen_link.get_attribute('href')}")
+            driver.execute_script("arguments[0].click();", chosen_link)
+            time.sleep(7)
+
+            if not execute_js_action(driver, "lần 2"): raise Exception("Thất bại ở bước 2: Inject JS lần 2")
+            
+            code_element = WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.XPATH, BUTTON_XPATH)))
+            code = code_element.text or code_element.get_attribute('value') or code_element.get_attribute('innerHTML')
+            if not code or not code.strip(): raise Exception("Lấy được mã rỗng hoặc không hợp lệ.")
+            
+            # --- THÀNH CÔNG! ---
+            print(f"✨ THÀNH CÔNG VỚI PROXY: {proxy_url} | MÃ: {code.strip()}")
+            driver.quit() # Đóng trình duyệt sau khi thành công
+            return {"status": "success", "data": code.strip()}
+
+        except (TimeoutException, WebDriverException) as e:
+            # Bắt các lỗi phổ biến của Selenium (timeout, không kết nối được,...)
+            # Đây là dấu hiệu proxy hỏng hoặc bị CAPTCHA
+            print(f"❌ Proxy {proxy_url} thất bại. Lỗi: {str(e)[:150]}...")
+            print("➡️ Thử proxy tiếp theo.")
             if driver:
-                driver.quit()
-            driver = None
-            continue
+                driver.quit() # Rất quan trọng: đóng phiên làm việc lỗi
+            continue # Chuyển sang proxy tiếp theo trong vòng lặp
 
-    if not successful_proxy or not driver:
-        return {"status": "error", "message": "Không tìm thấy proxy nào hoạt động trong danh sách sau khi kiểm tra."}
-
-    # --- THỰC HIỆN TÁC VỤ CHÍNH VỚI PROXY ĐÃ ĐƯỢC KIỂM CHỨNG ---
-    try:
-        print(f"\n🚀 Bắt đầu tác vụ chính với proxy đã được kiểm chứng: {successful_proxy}")
-        
-        # Quay lại Google để thực hiện tìm kiếm thật
-        print("🌐 Quay lại Google để tìm kiếm mục tiêu...")
-        driver.get("https://www.google.com")
-        
-        search_box = WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.NAME, 'q')))
-        search_query = f"site:{target['url']}"
-        search_box.send_keys(search_query)
-        search_box.submit()
-        
-        print(f"...Đã tìm kiếm '{search_query}'. Chờ kết quả...")
-        time.sleep(3)
-        
-        first_result = WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.XPATH, "//div[@id='search']//a[h3]")))
-        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", first_result)
-        time.sleep(1)
-        driver.execute_script("arguments[0].click();", first_result)
-        
-        print("✅ Đã click thành công. Chờ trang đích tải...")
-        time.sleep(7) 
-
-        if not execute_js_action(driver, "lần 1"): raise Exception("Thất bại ở bước 1: Inject JS lần 1")
-        
-        internal_links = get_internal_links(driver)
-        if not internal_links: raise Exception("Không tìm thấy link nội bộ hợp lệ.")
-        
-        chosen_link = random.choice(internal_links)
-        print(f"👉 Chọn link: {chosen_link.get_attribute('href')}")
-        driver.execute_script("arguments[0].click();", chosen_link)
-        time.sleep(7)
-
-        if not execute_js_action(driver, "lần 2"): raise Exception("Thất bại ở bước 2: Inject JS lần 2")
-        
-        code_element = WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.XPATH, BUTTON_XPATH)))
-        code = code_element.text or code_element.get_attribute('value') or code_element.get_attribute('innerHTML')
-        if not code or not code.strip(): raise Exception("Lấy được mã rỗng hoặc không hợp lệ.")
-        
-        print(f"✨ THÀNH CÔNG | MÃ: {code.strip()}")
-        return {"status": "success", "data": code.strip()}
-
-    except Exception as e:
-        error_message = f"❌ CÓ LỖI TRONG TÁC VỤ CHÍNH: {str(e)}"
-        print(error_message)
-        return {"status": "error", "message": str(e)}
-    finally:
-        if driver:
-            driver.quit()
-            print("✅ Đã đóng phiên làm việc từ xa.")
+    # Nếu vòng lặp kết thúc mà không có proxy nào thành công
+    return {"status": "error", "message": "Đã thử tất cả proxy nhưng không có proxy nào hoàn thành được tác vụ. Vui lòng kiểm tra lại danh sách proxy."}
