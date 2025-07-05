@@ -1,6 +1,4 @@
 discord.py
 python-dotenv
 selenium
-setuptools
-chromedriver-py
 aiohttp
