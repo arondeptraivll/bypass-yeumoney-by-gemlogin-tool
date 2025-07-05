@@ -1,6 +1,5 @@
 discord.py
 python-dotenv
-undetected-chromedriver
 selenium
 setuptools
 chromedriver-py
