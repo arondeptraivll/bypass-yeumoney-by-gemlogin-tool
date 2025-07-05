@@ -67,24 +67,21 @@ def run_automation_task(keyword):
     print(f"\n🔍 Bắt đầu xử lý cho: {target['name']} ({target['url']})")
     driver = None
     try:
-        # --- CẤU HÌNH "SIÊU TIẾT KIỆM" ---
+        # --- CẤU HÌNH CHỐNG CRASH TRÊN DOCKER ---
         options = webdriver.ChromeOptions()
-        # Các cờ bắt buộc cho môi trường Docker/Linux
+        
+        # Cờ quan trọng nhất để giải quyết vấn đề /dev/shm
+        options.add_argument("--disable-dev-shm-usage") 
+        
+        # Các cờ bắt buộc khác cho môi trường headless/docker
         options.add_argument("--headless=new")
         options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-gpu")
         
-        # Các cờ bổ sung để giảm thiểu tài nguyên
+        # Các cờ tối ưu hóa tài nguyên
         options.add_argument("--disable-extensions")
         options.add_argument("--disable-infobars")
-        options.add_argument("--disable-popup-blocking")
-        options.add_argument("--disable-notifications")
-        options.add_argument("--disable-background-networking")
-        options.add_argument("--disable-sync")
-        options.add_argument("--disable-translate")
-        options.add_argument("--disable-setuid-sandbox")
-        options.add_argument("--single-process") # Rất quan trọng để giảm bộ nhớ
+        options.add_argument("--single-process")
         options.add_argument("--window-size=1920,1080")
         
         # Sử dụng đường dẫn thật của trình duyệt
@@ -95,7 +92,7 @@ def run_automation_task(keyword):
         
         print(f"Đường dẫn trình duyệt (THẬT): {options.binary_location}")
         print(f"Đường dẫn driver: {service.path}")
-        print("Đang khởi tạo trình duyệt với cấu hình 'siêu tiết kiệm'...")
+        print("Đang khởi tạo trình duyệt với cấu hình chống crash...")
         
         driver = webdriver.Chrome(service=service, options=options)
         
