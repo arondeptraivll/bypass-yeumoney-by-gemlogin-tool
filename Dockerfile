@@ -49,5 +49,8 @@ COPY bot.py .
 # Cài đặt các thư viện Python
 RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
+# Mở cổng 10000 để web server có thể nhận kết nối từ bên ngoài
+EXPOSE 10000
+
 # Lệnh để chạy bot khi container khởi động
 CMD ["python", "bot.py"]
