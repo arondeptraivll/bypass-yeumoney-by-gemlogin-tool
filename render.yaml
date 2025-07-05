@@ -1,8 +1,10 @@
 # render.yaml
 services:
-  - type: worker # Loại dịch vụ là worker, chạy nền, không cần cổng web
+  - type: worker
     name: yeumoney-bot
     env: python
+    # Tăng dung lượng RAM để chạy trình duyệt ổn định hơn
+    plan: standard 
     buildCommand: |
       pip install --upgrade pip
       pip install -r requirements.txt
@@ -11,13 +13,6 @@ services:
     startCommand: python bot.py
     envVars:
       - key: DISCORD_TOKEN
-        fromService:
-          type: secret_file
-          name: discord_token_secret
-          key: token
+        sync: false # Quan trọng: Báo cho Render biết biến này sẽ được set thủ công trên dashboard
       - key: UC_DRIVER_EXE
         value: /usr/bin/chromium-browser # Chỉ định đường dẫn tới trình duyệt trên server Render
-
-secrets:
-  - key: discord_token_secret
-    name: discord-token-for-bot
