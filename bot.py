@@ -4,8 +4,6 @@ import os
 import asyncio
 from dotenv import load_dotenv
 from aiohttp import web
-
-# Import các thành phần từ file khác
 from automation import KEYWORD_MAP, run_automation_task
 
 load_dotenv()
@@ -21,17 +19,11 @@ async def automation_worker(queue: asyncio.Queue):
         try:
             interaction, keyword_value, keyword_name = await queue.get()
             print(f"Worker đã nhận công việc cho: {keyword_name}")
-
-            # Sửa tin nhắn gốc để thông báo cho người dùng
             await interaction.edit_original_response(
                 content=f"⏳ Đang chạy kịch bản cho **{keyword_name}**... Vui lòng chờ."
             )
-
-            # Chạy tác vụ blocking (Selenium)
             loop = asyncio.get_running_loop()
             result = await loop.run_in_executor(None, run_automation_task, keyword_value)
-            
-            # Gửi kết quả bằng một tin nhắn followup mới
             if result['status'] == 'success':
                 embed = discord.Embed(title=f"✅ Lấy mã thành công cho {keyword_name}!", description="Mã của bạn là:", color=discord.Color.green())
                 embed.add_field(name="🔑 MÃ", value=f"```\n{result['data']}\n```", inline=False)
@@ -43,8 +35,6 @@ async def automation_worker(queue: asyncio.Queue):
                 embed.add_field(name="Chi tiết lỗi", value=f"```{error_message}```", inline=False)
                 embed.set_footer(text=f"Yêu cầu bởi {interaction.user.display_name}")
                 await interaction.followup.send(embed=embed)
-            
-            # Xóa tin nhắn "Đang chạy..." ban đầu để đỡ rối chat
             await interaction.edit_original_response(content=f"Đã xử lý xong yêu cầu cho **{keyword_name}**.", view=None)
             queue.task_done()
         except Exception as e:
@@ -73,7 +63,6 @@ class MyClient(discord.Client):
         if not self.synced:
             await tree.sync()
             self.synced = True
-        
         asyncio.create_task(automation_worker(self.task_queue))
         print(f'✅ Bot đã đăng nhập với tên {self.user}.')
 
@@ -84,17 +73,13 @@ tree = app_commands.CommandTree(client)
 @app_commands.describe(keyword="Chọn website bạn muốn chạy kịch bản")
 @app_commands.choices(keyword=[app_commands.Choice(name=data['name'], value=key) for key, data in KEYWORD_MAP.items()])
 async def yeumoney_command(interaction: discord.Interaction, keyword: app_commands.Choice[str]):
-    # Bước 1: Xác nhận tương tác. Bot sẽ hiển thị "Bot is thinking..."
     await interaction.response.defer(ephemeral=False)
-    
-    # Bước 2: Đưa công việc vào hàng đợi.
     job = (interaction, keyword.value, keyword.name)
     await client.task_queue.put(job)
-    
-    # Bước 3: Thông báo đã nhận yêu cầu
     await interaction.edit_original_response(content=f"Đã nhận yêu cầu cho **{keyword.name}** và đưa vào hàng đợi xử lý!")
 
 async def main():
+    # Railway tự động cung cấp biến PORT
     port = int(os.environ.get('PORT', 10000))
     runner = web.AppRunner(client.web_app)
     await runner.setup()
