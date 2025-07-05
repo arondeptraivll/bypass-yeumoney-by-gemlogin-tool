@@ -2,3 +2,4 @@ discord.py
 python-dotenv
 undetected-chromedriver
 selenium
+setuptools
