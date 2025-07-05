@@ -9,7 +9,7 @@ import os
 from urllib.parse import urlparse
 import chromedriver_py
 
-# ================= CẤU HÌNH =================
+# ... (Giữ nguyên phần CẤU HÌNH và TIỆN ÍCH) ...
 KEYWORD_MAP = {
     "m88": {"name": "m88", "url": "bet88ec.com"},
     "w88": {"name": "w88", "url": "188.166.185.213"},
@@ -22,14 +22,11 @@ KEYWORD_MAP = {
 JS_FILE = "speedup.js"
 UNWANTED_LINKS = ["#", "javascript:", "logout", "signout", "tel:", "mailto:"]
 BUTTON_XPATH = "//*[@id='layma_me_vuatraffic']"
-
-# ================= TIỆN ÍCH =================
 def is_valid_link(href, domain):
     if not href: return False
     if any(unwanted in href.lower() for unwanted in UNWANTED_LINKS): return False
     parsed = urlparse(href)
     return ((not parsed.netloc or parsed.netloc == domain) and not href.startswith(('javascript:', 'mailto:', 'tel:')))
-
 def get_internal_links(driver):
     try:
         domain = urlparse(driver.current_url).netloc
@@ -38,14 +35,12 @@ def get_internal_links(driver):
         return valid_links
     except Exception as e:
         print(f"❌ Lỗi khi lấy link: {str(e)}"); return []
-
 def inject_js(driver):
     try:
         if not os.path.exists(JS_FILE): print(f"⚠️ File {JS_FILE} không tồn tại"); return False
         with open(JS_FILE, 'r') as f: driver.execute_script(f.read())
         return True
     except Exception as e: print(f"❌ Lỗi inject JS: {str(e)}"); return False
-
 def click_with_js_injection(driver, step_name):
     print(f"💉 Đang inject JS cho {step_name}...")
     inject_js(driver)
@@ -58,6 +53,7 @@ def click_with_js_injection(driver, step_name):
         print(f"✅ {step_name} thành công")
         return True
     except Exception as e: print(f"❌ Lỗi {step_name}: {str(e)}"); return False
+
 
 # ================= HÀM CHÍNH ĐỂ BOT GỌI =================
 def run_automation_task(keyword):
@@ -74,16 +70,20 @@ def run_automation_task(keyword):
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--headless=new")
         options.add_argument("--disable-gpu")
-        browser_path = "/usr/bin/google-chrome-stable"
+        
+        # --- THAY ĐỔI CUỐI CÙNG Ở ĐÂY ---
+        browser_path = "/opt/google/chrome/google-chrome" # Sử dụng đường dẫn thật
         options.binary_location = browser_path
+        
         service = Service(executable_path=chromedriver_py.binary_path)
         
-        print(f"Đường dẫn trình duyệt: {options.binary_location}")
+        print(f"Đường dẫn trình duyệt (THẬT): {options.binary_location}")
         print(f"Đường dẫn driver: {service.path}")
         
         driver = webdriver.Chrome(service=service, options=options)
         
         print("✅ TRÌNH DUYỆT ĐÃ KHỞI ĐỘNG THÀNH CÔNG!")
+        # ... (phần còn lại của hàm giữ nguyên) ...
         print("🌐 Đang truy cập Google...")
         driver.get("https://www.google.com")
         
