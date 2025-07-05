@@ -1,4 +1,8 @@
-import undetected_chromedriver as uc
+# --- THAY ĐỔI CỐT LÕI ---
+from selenium import webdriver  # Sử dụng thư viện Selenium chuẩn
+from selenium.webdriver.chrome.service import Service  # Cần để quản lý driver
+# -------------------------
+
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -6,7 +10,7 @@ import time
 import random
 import os
 from urllib.parse import urlparse
-import chromedriver_py  # Import thư viện chromedriver-py
+import chromedriver_py
 
 # ================= CẤU HÌNH =================
 KEYWORD_MAP = {
@@ -79,7 +83,7 @@ def click_with_js_injection(driver, step_name):
         print(f"❌ Lỗi {step_name}: {str(e)}")
         return False
 
-# ================= HÀM CHÍNH ĐỂ BOT GỌI (Cập nhật cuối cùng) =================
+# ================= HÀM CHÍNH ĐỂ BOT GỌI =================
 def run_automation_task(keyword):
     if keyword not in KEYWORD_MAP:
         return {"status": "error", "message": f"Từ khóa không hợp lệ: {keyword}"}
@@ -89,41 +93,38 @@ def run_automation_task(keyword):
 
     driver = None
     try:
-        # --- THAY ĐỔI CUỐI CÙNG VÀ QUAN TRỌNG NHẤT ---
-        options = uc.ChromeOptions()
+        # --- THAY ĐỔI CÁCH KHỞI TẠO DRIVER ---
+        options = webdriver.ChromeOptions()
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--headless=new")
-        options.add_argument("--disable-gpu") # Thêm cờ này để tăng tính ổn định
-
-        # Chỉ định rõ ràng đường dẫn đến trình duyệt và driver
-        # Đây là các đường dẫn chính xác bên trong Docker container của chúng ta
-        browser_path = "/usr/bin/google-chrome-stable"
-        driver_path = chromedriver_py.binary_path
-
-        print(f"Đường dẫn trình duyệt: {browser_path}")
-        print(f"Đường dẫn driver: {driver_path}")
+        options.add_argument("--disable-gpu")
         
-        driver = uc.Chrome(
-            options=options,
-            browser_executable_path=browser_path,
-            driver_executable_path=driver_path
-        )
+        # Chỉ định rõ ràng đường dẫn đến trình duyệt
+        browser_path = "/usr/bin/google-chrome-stable"
+        options.binary_location = browser_path
+        
+        # Tạo một Service object để quản lý chromedriver
+        service = Service(executable_path=chromedriver_py.binary_path)
+        
+        print(f"Đường dẫn trình duyệt: {options.binary_location}")
+        print(f"Đường dẫn driver: {service.path}")
+        
+        # Khởi tạo driver bằng Selenium chuẩn
+        driver = webdriver.Chrome(service=service, options=options)
         # --- KẾT THÚC THAY ĐỔI ---
         
+        print("✅ TRÌNH DUYỆT ĐÃ KHỞI ĐỘNG THÀNH CÔNG!")
         print("🌐 Đang truy cập Google...")
         driver.get("https://www.google.com")
-        search_box = WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located((By.NAME, 'q'))
-        )
+        
+        search_box = WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.NAME, 'q')))
         search_box.send_keys(f"site:{target['url']}")
         search_box.submit()
         time.sleep(2)
 
         print("🔗 Đang chọn kết quả tìm kiếm...")
-        first_result = WebDriverWait(driver, 20).until(
-            EC.element_to_be_clickable((By.XPATH, "//div[@id='search']//a"))
-        )
+        first_result = WebDriverWait(driver, 20).until(EC.element_to_be_clickable((By.XPATH, "//div[@id='search']//a")))
         first_result.click()
         time.sleep(3)
 
@@ -146,9 +147,7 @@ def run_automation_task(keyword):
         time.sleep(4)
 
         print("🔢 Đang lấy mã...")
-        code_element = WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located((By.XPATH, BUTTON_XPATH))
-        )
+        code_element = WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.XPATH, BUTTON_XPATH)))
         code = code_element.text or code_element.get_attribute('value') or code_element.get_attribute('innerHTML')
         
         if not code or not code.strip():
