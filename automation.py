@@ -30,6 +30,7 @@ def is_valid_link(href, domain):
     if any(unwanted in href.lower() for unwanted in UNWANTED_LINKS): return False
     parsed = urlparse(href)
     return ((not parsed.netloc or parsed.netloc == domain) and not href.startswith(('javascript:', 'mailto:', 'tel:')))
+
 def get_internal_links(driver):
     try:
         domain = urlparse(driver.current_url).netloc
@@ -38,6 +39,7 @@ def get_internal_links(driver):
         return valid_links
     except Exception as e:
         print(f"❌ Lỗi khi lấy link: {str(e)}"); return []
+
 def execute_js_action(driver, step_name):
     print(f"💉 Đang inject JS cho {step_name}...")
     try:
@@ -78,62 +80,57 @@ def run_automation_task(keyword):
         driver = webdriver.Remote(command_executor=remote_url, options=options)
         print("✅ KẾT NỐI TRÌNH DUYỆT TỪ XA THÀNH CÔNG!")
         
-        # --- SỬ DỤNG DUCKDUCKGO ĐỂ TRÁNH CAPTCHA ---
-        print("🌐 Đang truy cập DuckDuckGo...")
-        driver.get("https://duckduckgo.com/")
+        # === BẮT CHƯỚC HÀNH VI NGƯỜI DÙNG ĐỂ CÓ REFERER HỢP LỆ ===
+        print("🌐 Đang truy cập Google.com để bắt đầu luồng tìm kiếm tự nhiên...")
+        driver.get("https://www.google.com")
+
+        # --- XỬ LÝ POP-UP COOKIE CỦA GOOGLE ---
+        try:
+            print("...Đang kiểm tra pop-up cookie của Google...")
+            # Sử dụng XPath linh hoạt để tìm nút Chấp nhận/Accept/Reject
+            cookie_button_xpath = "//button[div[contains(text(), 'Accept all') or contains(text(), 'Chấp nhận tất cả') or contains(text(), 'Reject all') or contains(text(), 'Từ chối tất cả')]]"
+            accept_button = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.XPATH, cookie_button_xpath)))
+            accept_button.click()
+            print("✅ Đã xử lý pop-up cookie.")
+            time.sleep(1)
+        except TimeoutException:
+            print("ℹ️ Không tìm thấy pop-up cookie, tiếp tục.")
+            
+        # --- TÌM KIẾM TỰ NHIÊN ---
         search_box = WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.NAME, 'q')))
-        search_query = f"site:{target['url']}"
-        print(f"🦆 Đang tìm kiếm với DuckDuckGo: '{search_query}'")
+        search_query = target['name'] # Sử dụng tên tự nhiên, ví dụ: "m88"
+        print(f"👨‍💻 Đang tìm kiếm như người dùng thật với từ khóa: '{search_query}'")
         search_box.send_keys(search_query)
         search_box.submit()
-        print("...Chờ trang kết quả của DuckDuckGo ổn định...")
+        
+        print("...Chờ trang kết quả của Google tải xong...")
         time.sleep(3)
 
-        # === THAY ĐỔI: KIỂM TRA TRƯỜNG HỢP KHÔNG CÓ KẾT QUẢ ===
-        try:
-            # Dùng WebDriverWait với thời gian ngắn để kiểm tra nhanh
-            no_results_element = WebDriverWait(driver, 3).until(
-                EC.presence_of_element_located((By.XPATH, "//div[contains(@class, 'results--no')]"))
-            )
-            if no_results_element:
-                raise Exception(f"DuckDuckGo không tìm thấy kết quả nào cho truy vấn '{search_query}'. Vui lòng kiểm tra lại URL trong KEYWORD_MAP.")
-        except TimeoutException:
-            # Tốt! Không tìm thấy thông báo lỗi, nghĩa là có kết quả.
-            print("ℹ️ Đã tìm thấy trang kết quả, tiếp tục xử lý.")
-            pass
-
-        # === THAY ĐỔI: SỬ DỤNG NHIỀU XPATH ĐỂ TĂNG ĐỘ TIN CẬY ===
-        possible_xpaths = [
-            # 1. XPath mới, hiện đại và ổn định hơn, dựa trên data-testid
-            "//article[@data-testid='result']//a[@data-testid='result-title-a']",
-            # 2. XPath cũ làm dự phòng
-            "//div[@id='links']//a[contains(@class, 'result__a')]"
-        ]
+        # --- TÌM ĐÚNG LINK ĐÍCH TRONG CÁC KẾT QUẢ ---
+        print(f"🎯 Đang quét các kết quả để tìm link chứa domain: '{target['url']}'")
+        search_results = driver.find_elements(By.XPATH, "//div[@id='search']//a[@href]")
         
-        first_result = None
-        for i, xpath in enumerate(possible_xpaths):
-            try:
-                print(f"🔗 Đang thử tìm kết quả với XPath #{i+1}...")
-                first_result = WebDriverWait(driver, 10).until(
-                    EC.presence_of_element_located((By.XPATH, xpath))
-                )
-                print(f"✅ Tìm thấy phần tử với XPath #{i+1}. Tiến hành click.")
-                break 
-            except TimeoutException:
-                print(f"⚠️ Không tìm thấy với XPath #{i+1}. Thử phương án tiếp theo...")
+        correct_link_element = None
+        for link in search_results:
+            href = link.get_attribute('href')
+            if href and target['url'] in href:
+                print(f"✅ Đã tìm thấy link chính xác: {href}")
+                correct_link_element = link
+                break # Thoát vòng lặp ngay khi tìm thấy
 
-        if not first_result:
-            raise Exception("Không thể tìm thấy kết quả tìm kiếm trên DuckDuckGo với tất cả các XPath đã thử.")
+        if not correct_link_element:
+            raise Exception(f"Không thể tìm thấy link nào chứa '{target['url']}' trong trang kết quả tìm kiếm của Google cho từ khóa '{search_query}'.")
 
-        print("Sử dụng JavaScript để thực hiện cú click 'bất khả chiến bại'...")
-        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", first_result)
+        # --- CLICK VÀO LINK ĐÍCH ĐỂ CÓ REFERER HỢP LỆ ---
+        print("Sử dụng JavaScript để click vào link đích...")
+        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", correct_link_element)
         time.sleep(1)
-        driver.execute_script("arguments[0].click();", first_result)
+        driver.execute_script("arguments[0].click();", correct_link_element)
         
-        print("✅ Đã click thành công vào kết quả tìm kiếm. Chờ trang đích tải...")
+        print(f"✅ Đã click vào link. Trình duyệt đang điều hướng đến trang đích với Referer từ Google. Chờ trang tải...")
         time.sleep(7) 
 
-        # --- Các bước sau giữ nguyên ---
+        # --- CÁC BƯỚC SAU KHI VÀO TRANG ĐÍCH (GIỮ NGUYÊN) ---
         if not execute_js_action(driver, "lần 1"): raise Exception("Thất bại ở bước 1: Inject JS lần 1")
         
         print("🎲 Đang tìm link nội bộ...")
