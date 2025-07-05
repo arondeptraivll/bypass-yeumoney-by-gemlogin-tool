@@ -1,3 +1,5 @@
+# --- START OF FILE automation.py ---
+
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -63,7 +65,7 @@ def run_automation_task(keyword):
         remote_url = f"https://{bs_user}:{bs_key}@hub-cloud.browserstack.com/wd/hub"
         
         options = webdriver.ChromeOptions()
-        options.add_argument("--incognito") # Luôn dùng chế độ ẩn danh
+        options.add_argument("--incognito") 
         
         bstack_options = {
             "os": "Windows", "osVersion": "11",
@@ -76,50 +78,31 @@ def run_automation_task(keyword):
         driver = webdriver.Remote(command_executor=remote_url, options=options)
         print("✅ KẾT NỐI TRÌNH DUYỆT TỪ XA THÀNH CÔNG!")
         
-        print("🌐 Đang truy cập Google...")
-        driver.get("https://www.google.com")
-        
-        # --- XỬ LÝ POP-UP COOKIE (NẾU CÓ) ---
-        try:
-            print("...Đang kiểm tra pop-up cookie của Google...")
-            # Sử dụng XPath linh hoạt để tìm nút Chấp nhận/Accept
-            accept_button_xpath = "//button[div[contains(text(), 'Accept all') or contains(text(), 'Chấp nhận tất cả')]]"
-            accept_button = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.XPATH, accept_button_xpath)))
-            accept_button.click()
-            print("✅ Đã xử lý pop-up cookie.")
-            time.sleep(1)
-        except Exception:
-            print("ℹ️ Không tìm thấy pop-up cookie, tiếp tục.")
+        # === THAY ĐỔI: SỬ DỤNG DUCKDUCKGO THAY VÌ GOOGLE ĐỂ TRÁNH CAPTCHA ===
+        print("🌐 Đang truy cập DuckDuckGo...")
+        driver.get("https://duckduckgo.com/")
 
-        search_box = WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.NAME, 'q')))
-        search_box.send_keys(f"site:{target['url']}")
+        # Tìm ô tìm kiếm của DuckDuckGo và nhập từ khóa
+        search_box = WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located((By.NAME, 'q'))
+        )
+        search_query = f"site:{target['url']}"
+        print(f"🦆 Đang tìm kiếm với DuckDuckGo: '{search_query}'")
+        search_box.send_keys(search_query)
         search_box.submit()
         
-        print("...Chờ trang kết quả của Google ổn định...")
+        print("...Chờ trang kết quả của DuckDuckGo ổn định...")
         time.sleep(3)
 
-        # --- CHIẾN LƯỢC "TÌM VÀ DIỆT" ---
-        possible_xpaths = [
-            "//*[@id='rso']/div[1]/div/div/div/div[1]/div/div/span/a", # 1. Ưu tiên XPath của bạn
-            "//div[@id='search']//a[h3]"  # 2. Fallback: XPath linh hoạt hơn
-        ]
+        # Tìm kết quả đầu tiên trên trang kết quả của DuckDuckGo
+        # XPath này ổn định hơn cho kết quả của DuckDuckGo
+        first_result_xpath = "//div[@id='links']//a[contains(@class, 'result__a')]"
         
-        first_result = None
-        for i, xpath in enumerate(possible_xpaths):
-            try:
-                print(f"🔗 Đang thử tìm kết quả với XPath #{i+1}...")
-                # Chỉ cần tìm thấy sự hiện diện là đủ, không cần đợi click được
-                first_result = WebDriverWait(driver, 10).until(
-                    EC.presence_of_element_located((By.XPATH, xpath))
-                )
-                print(f"✅ Tìm thấy phần tử với XPath #{i+1}. Tiến hành click.")
-                break # Thoát khỏi vòng lặp nếu đã tìm thấy
-            except Exception:
-                print(f"⚠️ Không tìm thấy với XPath #{i+1}.")
-
-        if not first_result:
-            raise Exception("Không thể tìm thấy kết quả tìm kiếm trên Google với tất cả các XPath đã thử.")
-
+        print("🔗 Đang tìm kết quả đầu tiên trên DuckDuckGo...")
+        first_result = WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located((By.XPATH, first_result_xpath))
+        )
+        
         print("Sử dụng JavaScript để thực hiện cú click 'bất khả chiến bại'...")
         driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", first_result)
         time.sleep(1) # Chờ một chút sau khi cuộn
@@ -155,9 +138,6 @@ def run_automation_task(keyword):
         print(error_message)
         if driver:
             try:
-                # Cố gắng chụp ảnh màn hình để chẩn đoán
-                screenshot_name = f"debug_error_{int(time.time())}.png"
-                driver.save_screenshot(screenshot_name)
                 # Trên BrowserStack, bạn có thể xem lại video của phiên làm việc thất bại
                 print(f"Đã xảy ra lỗi. Vui lòng kiểm tra video ghi lại phiên làm việc trên Dashboard của BrowserStack.")
             except: pass
