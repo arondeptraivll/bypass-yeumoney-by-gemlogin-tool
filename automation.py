@@ -7,7 +7,7 @@ import random
 import os
 from urllib.parse import urlparse
 
-# ================= CẤU HÌNH (Không đổi) =================
+# ================= CẤU HÌNH =================
 KEYWORD_MAP = {
     "m88": {"name": "m88", "url": "bet88ec.com"},
     "w88": {"name": "w88", "url": "188.166.185.213"},
@@ -21,12 +21,13 @@ JS_FILE = "speedup.js"
 UNWANTED_LINKS = ["#", "javascript:", "logout", "signout", "tel:", "mailto:"]
 BUTTON_XPATH = "//*[@id='layma_me_vuatraffic']" 
 
-# ================= TIỆN ÍCH (Không đổi) =================
+# ================= TIỆN ÍCH =================
 def is_valid_link(href, domain):
     if not href: return False
     if any(unwanted in href.lower() for unwanted in UNWANTED_LINKS): return False
     parsed = urlparse(href)
     return ((not parsed.netloc or parsed.netloc == domain) and not href.startswith(('javascript:', 'mailto:', 'tel:')))
+
 def get_internal_links(driver):
     try:
         domain = urlparse(driver.current_url).netloc
@@ -35,13 +36,18 @@ def get_internal_links(driver):
         return valid_links
     except Exception as e:
         print(f"❌ Lỗi khi lấy link: {str(e)}"); return []
+
 def execute_js_action(driver, step_name):
+    """
+    Hàm này chỉ thực hiện việc inject file JS và chờ cho nó hoàn thành.
+    Nó không thực hiện hành động click.
+    """
     print(f"💉 Đang inject JS cho {step_name}...")
     try:
         if not os.path.exists(JS_FILE): raise Exception(f"File {JS_FILE} không tồn tại")
         with open(JS_FILE, 'r') as f: driver.execute_script(f.read())
         print(f"✅ Đã inject JS cho {step_name}. Chờ 5 giây để hành động hoàn tất...")
-        time.sleep(5)
+        time.sleep(5) # Chờ 5 giây để JS tự click và trang ổn định
         return True
     except Exception as e:
         print(f"❌ Lỗi khi inject JS cho {step_name}: {str(e)}"); return False
@@ -61,17 +67,31 @@ def run_automation_task(keyword):
         remote_url = f"https://{bs_user}:{bs_key}@hub-cloud.browserstack.com/wd/hub"
         
         options = webdriver.ChromeOptions()
+        
+        # --- NÂNG CẤP "KHỞI ĐẦU SẠCH SẼ" ---
+        # 1. Thêm cờ để khởi động ở chế độ "Ẩn danh" (Incognito)
+        #    Điều này đảm bảo không có cookie hay cache nào từ lần trước.
+        options.add_argument("--incognito")
+
+        # 2. Thêm một số tùy chọn khác để dọn dẹp
+        options.add_argument("--disable-application-cache")
+        options.add_argument("--disk-cache-size=0")
+
+        # 3. Đặt tên phiên làm việc với một số ngẫu nhiên để đảm bảo tính duy nhất
+        session_name = f"Yeumoney Task - {keyword} - {random.randint(1000, 9999)}"
+        
         bstack_options = {
             "os": "Windows", "osVersion": "11",
             "browserName": "Chrome", "browserVersion": "latest",
-            "sessionName": f"Yeumoney Task - {keyword}"
+            "sessionName": session_name,
         }
         options.set_capability('bstack:options', bstack_options)
 
-        print(f"Đang kết nối đến trình duyệt từ xa tại BrowserStack...")
+        print(f"Đang kết nối đến trình duyệt từ xa (phiên mới: {session_name})...")
         driver = webdriver.Remote(command_executor=remote_url, options=options)
         print("✅ KẾT NỐI TRÌNH DUYỆT TỪ XA THÀNH CÔNG!")
         
+        # --- Luồng chính giữ nguyên ---
         print("🌐 Đang truy cập Google...")
         driver.get("https://www.google.com")
         
@@ -80,15 +100,12 @@ def run_automation_task(keyword):
         search_box.submit()
         
         print("...Chờ trang kết quả của Google ổn định...")
-        time.sleep(5)
+        time.sleep(5) 
 
-        # <<< SỬ DỤNG XPATH CHÍNH XÁC BẠN CUNG CẤP >>>
-        print("🔗 Đang tìm kết quả tìm kiếm với XPath bạn đã cung cấp...")
+        print("🔗 Đang tìm kết quả tìm kiếm với XPath chính xác...")
         first_result_xpath = "//*[@id='rso']/div[1]/div/div/div/div[1]/div/div/span/a"
         
-        first_result = WebDriverWait(driver, 20).until(
-            EC.element_to_be_clickable((By.XPATH, first_result_xpath))
-        )
+        first_result = WebDriverWait(driver, 20).until(EC.element_to_be_clickable((By.XPATH, first_result_xpath)))
         
         print("Sử dụng JavaScript để thực hiện cú click chính xác...")
         driver.execute_script("arguments[0].click();", first_result)
@@ -96,7 +113,6 @@ def run_automation_task(keyword):
         print("✅ Đã click thành công vào kết quả tìm kiếm. Chờ trang đích tải...")
         time.sleep(7) 
 
-        # --- Các bước sau giữ nguyên logic đúng của bạn ---
         if not execute_js_action(driver, "lần 1"): raise Exception("Thất bại ở bước 1: Inject JS lần 1")
         
         print("🎲 Đang tìm link nội bộ...")
