@@ -4,6 +4,7 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
 import time
 import random
 import os
@@ -24,7 +25,6 @@ UNWANTED_LINKS = ["#", "javascript:", "logout", "signout", "tel:", "mailto:"]
 BUTTON_XPATH = "//*[@id='layma_me_vuatraffic']" 
 
 # ================= TIỆN ÍCH (Không đổi) =================
-# ... (Giữ nguyên các hàm tiện ích)
 def is_valid_link(href, domain):
     if not href: return False
     if any(unwanted in href.lower() for unwanted in UNWANTED_LINKS): return False
@@ -78,34 +78,56 @@ def run_automation_task(keyword):
         driver = webdriver.Remote(command_executor=remote_url, options=options)
         print("✅ KẾT NỐI TRÌNH DUYỆT TỪ XA THÀNH CÔNG!")
         
-        # === THAY ĐỔI: SỬ DỤNG DUCKDUCKGO THAY VÌ GOOGLE ĐỂ TRÁNH CAPTCHA ===
+        # --- SỬ DỤNG DUCKDUCKGO ĐỂ TRÁNH CAPTCHA ---
         print("🌐 Đang truy cập DuckDuckGo...")
         driver.get("https://duckduckgo.com/")
-
-        # Tìm ô tìm kiếm của DuckDuckGo và nhập từ khóa
-        search_box = WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located((By.NAME, 'q'))
-        )
+        search_box = WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.NAME, 'q')))
         search_query = f"site:{target['url']}"
         print(f"🦆 Đang tìm kiếm với DuckDuckGo: '{search_query}'")
         search_box.send_keys(search_query)
         search_box.submit()
-        
         print("...Chờ trang kết quả của DuckDuckGo ổn định...")
         time.sleep(3)
 
-        # Tìm kết quả đầu tiên trên trang kết quả của DuckDuckGo
-        # XPath này ổn định hơn cho kết quả của DuckDuckGo
-        first_result_xpath = "//div[@id='links']//a[contains(@class, 'result__a')]"
+        # === THAY ĐỔI: KIỂM TRA TRƯỜNG HỢP KHÔNG CÓ KẾT QUẢ ===
+        try:
+            # Dùng WebDriverWait với thời gian ngắn để kiểm tra nhanh
+            no_results_element = WebDriverWait(driver, 3).until(
+                EC.presence_of_element_located((By.XPATH, "//div[contains(@class, 'results--no')]"))
+            )
+            if no_results_element:
+                raise Exception(f"DuckDuckGo không tìm thấy kết quả nào cho truy vấn '{search_query}'. Vui lòng kiểm tra lại URL trong KEYWORD_MAP.")
+        except TimeoutException:
+            # Tốt! Không tìm thấy thông báo lỗi, nghĩa là có kết quả.
+            print("ℹ️ Đã tìm thấy trang kết quả, tiếp tục xử lý.")
+            pass
+
+        # === THAY ĐỔI: SỬ DỤNG NHIỀU XPATH ĐỂ TĂNG ĐỘ TIN CẬY ===
+        possible_xpaths = [
+            # 1. XPath mới, hiện đại và ổn định hơn, dựa trên data-testid
+            "//article[@data-testid='result']//a[@data-testid='result-title-a']",
+            # 2. XPath cũ làm dự phòng
+            "//div[@id='links']//a[contains(@class, 'result__a')]"
+        ]
         
-        print("🔗 Đang tìm kết quả đầu tiên trên DuckDuckGo...")
-        first_result = WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.XPATH, first_result_xpath))
-        )
-        
+        first_result = None
+        for i, xpath in enumerate(possible_xpaths):
+            try:
+                print(f"🔗 Đang thử tìm kết quả với XPath #{i+1}...")
+                first_result = WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.XPATH, xpath))
+                )
+                print(f"✅ Tìm thấy phần tử với XPath #{i+1}. Tiến hành click.")
+                break 
+            except TimeoutException:
+                print(f"⚠️ Không tìm thấy với XPath #{i+1}. Thử phương án tiếp theo...")
+
+        if not first_result:
+            raise Exception("Không thể tìm thấy kết quả tìm kiếm trên DuckDuckGo với tất cả các XPath đã thử.")
+
         print("Sử dụng JavaScript để thực hiện cú click 'bất khả chiến bại'...")
         driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", first_result)
-        time.sleep(1) # Chờ một chút sau khi cuộn
+        time.sleep(1)
         driver.execute_script("arguments[0].click();", first_result)
         
         print("✅ Đã click thành công vào kết quả tìm kiếm. Chờ trang đích tải...")
@@ -138,7 +160,6 @@ def run_automation_task(keyword):
         print(error_message)
         if driver:
             try:
-                # Trên BrowserStack, bạn có thể xem lại video của phiên làm việc thất bại
                 print(f"Đã xảy ra lỗi. Vui lòng kiểm tra video ghi lại phiên làm việc trên Dashboard của BrowserStack.")
             except: pass
         return {"status": "error", "message": str(e)}
